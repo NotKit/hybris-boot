@@ -26,8 +26,14 @@ echo "Running Mer Boat Loader"
 
 BOOTLOGO=%BOOTLOGO%
 ALWAYSDEBUG=%ALWAYSDEBUG%
-DATA_PARTITION=%DATA_PART%
+DATA_PARTITION=/dev/mmcblk1p24
 DEFAULT_OS=%DEFAULT_OS%
+
+SAFESTRAP_PARTITION=/dev/mmcblk1p25
+REAL_DATA_PARTITION=/dev/mmcblk1p24
+SYSTEM_PARTITION=/dev/mmcblk1p20
+PREINSTAL_PARTITION=/dev/mmcblk1p22
+WEBTOP_PARTITION=/dev/mmcblk1p23
 
 set_welcome_msg(){
 cat <<EOF > /etc/issue.net
@@ -137,20 +143,64 @@ bootsplash() {
 
 
 mount_stowaways() {
+    echo "########################## mounting safestrap"
+    # mount safestrap partition
+    mkdir /ss
+    mount -t vfat -o uid=1023,gid=1023,fmask=0007,dmask=0007,allow_utime=0020 $SAFESTRAP_PARTITION /ss
+
+    SLOT_LOC=$(cat /ss/safestrap/active_slot)
+
+    if [ "$SLOT_LOC" = "stock" ]; then
+        # umount /ss
+    elif [ "$SLOT_LOC" = "safe" ]; then
+        mv /dev/block/system /dev/block/systemorig
+        mv /dev/block/userdata /dev/block/userdataorig
+
+        SYSTEM_PARTITION=$PREINSTAL_PARTITION
+        DATA_PARTITION=$WEBTOP_PARTITION
+
+        # umount /ss
+    else
+        # setup loopbacks
+        DATA_PARTITION=$(losetup -f)
+        losetup $DATA_PARTITION /ss/safestrap/$SLOT_LOC/userdata.img
+
+        SYSTEM_PARTITION=$(losetup -f)
+        losetup $SYSTEM_PARTITION /ss/safestrap/$SLOT_LOC/system.img
+    fi
     echo "########################## mounting stowaways"
     if [ ! -z $DATA_PARTITION ]; then
         data_subdir="$(get_opt data_subdir)"
 
-	mkdir /data
-	mkdir /target
+        mkdir /data
+        mkdir /target
 
-	mount $DATA_PARTITION /data
-	mount --bind /data/${data_subdir}/.stowaways/${DEFAULT_OS} /target
-	mkdir /target/data # in new fs
-	mount --bind /data/${data_subdir} /target/data
+        mount $DATA_PARTITION /data
+
+        if [ ! -d "/data/${data_subdir}/.stowaways/${DEFAULT_OS}" ]; then
+            # Try mounting real data partition as fallback
+            umount /data
+            mount $REAL_DATA_PARTITION /data
+
+            if [ ! -d "/data/${data_subdir}/.stowaways/${DEFAULT_OS}" ]; then
+                echo "Failed to find /data/${data_subdir}/.stowaways/${DEFAULT_OS}" >> /diagnosis.log
+            fi
+        fi
+
+        mount --bind /data/${data_subdir}/.stowaways/${DEFAULT_OS} /target
+        mkdir /target/data # in new fs
+        mount --bind /data/${data_subdir} /target/data
+        mkdir /target/ss
+        mount --bind /ss /target/ss
     else
         echo "Failed to mount /target, device node '$DATA_PARTITION' not found!" >> /diagnosis.log
     fi
+
+    if [ ! -z $SYSTEM_PARTITION ]; then
+        mkdir /target/system
+        mount $SYSTEM_PARTITION -o ro /target/system
+    fi
+
     mount
 }
 

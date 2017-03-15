@@ -7,15 +7,15 @@ ui_print("     Version: %VERSION%");
 ui_print("       Image: %IMAGE_FILE%");
 ui_print("        Size: %IMAGE_SIZE%");
 ui_print("  Partitions:");
-ui_print("    /boot -> %BOOT_PART%");
-ui_print("    /data -> %DATA_PART%");
+ui_print("    /data -> /dev/block/userdata");
 ui_print("========================================");
 ui_print("");
 
 %ASSERT_DEVICE%
 
 ui_print("Device check succeeded, mounting filesystems ...");
-mount("ext4", "EMMC", "%DATA_PART%", "/data");
+mount("ext4", "EMMC", "/dev/block/userdata", "/data");
+mount("ext3", "EMMC", "/dev/block/system", "/system");
 
 ui_print("Copying filesystem archive ...");
 package_extract_file("%IMAGE_FILE%", "/data/sailfishos-rootfs.tar.bz2");
@@ -26,11 +26,15 @@ ui_print("Running installation script ...");
 %SET_PERMISSIONS%
 run_program("/tmp/updater-unpack.sh") == "0" || abort("Failed to extract filesystem!");
 
-ui_print("Flashing hybris-boot.img ...");
-package_extract_file("hybris-boot.img", "%BOOT_PART%");
+ui_print("Replacing /system/etc/kexec/kernel...");
+package_extract_file("kernel", "/system/etc/kexec/kernel");
+
+ui_print("Replacing /system/etc/kexec/ramdisk.img...");
+package_extract_file("ramdisk.img", "/system/etc/kexec/ramdisk.img");
 
 ui_print("Unmounting filesystems ...");
 unmount("/data");
+unmount("/system");
 
 ui_print("Done!");
 
