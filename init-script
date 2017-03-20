@@ -151,15 +151,10 @@ mount_stowaways() {
     SLOT_LOC=$(cat /ss/safestrap/active_slot)
 
     if [ "$SLOT_LOC" = "stock" ]; then
-        # umount /ss
+        :
     elif [ "$SLOT_LOC" = "safe" ]; then
-        mv /dev/block/system /dev/block/systemorig
-        mv /dev/block/userdata /dev/block/userdataorig
-
         SYSTEM_PARTITION=$PREINSTAL_PARTITION
         DATA_PARTITION=$WEBTOP_PARTITION
-
-        # umount /ss
     else
         # setup loopbacks
         DATA_PARTITION=$(losetup -f)
