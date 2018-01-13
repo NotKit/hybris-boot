@@ -141,8 +141,7 @@ bootsplash() {
     fi
 }
 
-
-mount_stowaways() {
+mount_safestrap() {
     echo "########################## mounting safestrap"
     # mount safestrap partition
     mkdir /ss
@@ -163,6 +162,42 @@ mount_stowaways() {
         SYSTEM_PARTITION=$(losetup -f)
         losetup $SYSTEM_PARTITION /ss/safestrap/$SLOT_LOC/system.img
     fi
+}
+
+mount_kexecboot() {
+    ROOT_PARTITION="$(get_opt root)"
+    DATA_PARTITION="$(get_opt data_partition)"
+    SYSTEM_PARTITION="$(get_opt system_partition)"
+
+    if [ ! -z $ROOT_PARTITION ]; then
+        echo "########################## mounting rootfs"
+        mkdir /target
+        mount $ROOT_PARTITION /target
+
+        if [ ! -z $DATA_PARTITION ]; then
+            echo "########################## mounting /data"
+            data_subdir="$(get_opt data_subdir)"
+
+            mkdir /data
+            mount $DATA_PARTITION /data
+            mkdir /target/data # in new fs
+            mount --bind /data/${data_subdir} /target/data
+        fi
+
+        if [ ! -z $SYSTEM_PARTITION ]; then
+            echo "########################## mounting /system"
+            mkdir /target/system
+            mount $SYSTEM_PARTITION -o ro /target/system
+        fi
+    elif [ ! -z $DATA_PARTITION ]; then
+        # No root specified, try to mount SailfishOS from /data/.stowaways as usual
+        mount_stowaways
+    else
+        echo "Failed to mount /target, neither root= or data_partition= are specified!" >> /diagnosis.log
+    fi
+}
+
+mount_stowaways() {
     echo "########################## mounting stowaways"
     if [ ! -z $DATA_PARTITION ]; then
         data_subdir="$(get_opt data_subdir)"
@@ -352,7 +387,12 @@ if [ "$DONE_SWITCH" = "no" ]; then
 
     bootsplash
 
-    mount_stowaways
+    if [ "$(get_opt root)" = "/dev/ram0" ] ; then
+        mount_safestrap
+        mount_stowaways
+    else
+        mount_kexecboot
+    fi
 
     # No target debug unless we debug here too (for now)
 
