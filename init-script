@@ -27,7 +27,8 @@ echo "Running Mer Boat Loader"
 BOOTLOGO=%BOOTLOGO%
 ALWAYSDEBUG=%ALWAYSDEBUG%
 DATA_PARTITION=%DATA_PART%
-DEFAULT_OS=%DEFAULT_OS%
+LINUX_PARTITION=/dev/mmcblk0p29
+DEFAULT_OS=sailfishos
 
 set_welcome_msg(){
 cat <<EOF > /etc/issue.net
@@ -138,16 +139,23 @@ bootsplash() {
 
 mount_stowaways() {
     echo "########################## mounting stowaways"
-    if [ ! -z $DATA_PARTITION ]; then
+    if [ ! -z $DATA_PARTITION ] || [ ! -z $LINUX_PARTITION ]; then
         data_subdir="$(get_opt data_subdir)"
 
-	mkdir /data
-	mkdir /target
+        mkdir /linux
+        mkdir /data
+        mkdir /target
 
-	mount $DATA_PARTITION /data
-	mount --bind /data/${data_subdir}/.stowaways/${DEFAULT_OS} /target
-	mkdir /target/data # in new fs
-	mount --bind /data/${data_subdir} /target/data
+        mount $LINUX_PARTITION /linux
+        if [ -d "/linux/.stowaways/${DEFAULT_OS}" ]; then
+            mount --bind /linux/${data_subdir}/.stowaways/${DEFAULT_OS} /target
+            mkdir -p /target/data # in new fs
+        else
+            mount $DATA_PARTITION /data
+            mount --bind /data/${data_subdir}/.stowaways/${DEFAULT_OS} /target
+            mkdir /target/data # in new fs
+            mount --bind /data/${data_subdir} /target/data
+        fi
     else
         echo "Failed to mount /target, device node '$DATA_PARTITION' not found!" >> /diagnosis.log
     fi
