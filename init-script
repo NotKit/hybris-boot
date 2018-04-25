@@ -24,10 +24,9 @@ set -x
 exec > /init.log 2>&1
 echo "Running Mer Boat Loader"
 
-BOOTLOGO=%BOOTLOGO%
-ALWAYSDEBUG=%ALWAYSDEBUG%
-DATA_PARTITION=%DATA_PART%
-DEFAULT_OS=%DEFAULT_OS%
+BOOTLOGO=
+ALWAYSDEBUG=
+LINUX_PARTITION="/dev/mmcblk0p29"
 
 set_welcome_msg(){
 cat <<EOF > /etc/issue.net
@@ -137,28 +136,16 @@ bootsplash() {
 
 
 mount_stowaways() {
-    echo "########################## mounting stowaways"
-    if [ ! -z $DATA_PARTITION ]; then
-        data_subdir="$(get_opt data_subdir)"
-
-	mkdir /data
+    echo "########################## mounting linux"
 	mkdir /target
 
-	mount $DATA_PARTITION /data
-	mount --bind /data/${data_subdir}/.stowaways/${DEFAULT_OS} /target
-	mkdir /target/data # in new fs
-	mount --bind /data/${data_subdir} /target/data
-    else
-        echo "Failed to mount /target, device node '$DATA_PARTITION' not found!" >> /diagnosis.log
-    fi
+	mount $LINUX_PARTITION /target
     mount
 }
 
 umount_stowaways() {
     if [ ! -z $DATA_PARTITION ]; then
-	umount /target/data
-	umount /target
-	umount /data
+        umount /target
     fi
 }
 
@@ -303,7 +290,7 @@ if [ "$DONE_SWITCH" = "no" ]; then
     ln -s . /dev/block
     ln -s /proc/mounts /etc/mtab
 
-    check_kernel_config
+    # check_kernel_config
 
     bootsplash
 
@@ -326,7 +313,7 @@ if [ "$DONE_SWITCH" = "no" ]; then
 	if [ -f $lun ]; then echo /dev/mmcblk0 > $lun; fi
 	USB_FUNCTIONS=rndis,mass_storage
 
-	run_debug_session $DBG_REASON
+	run_debug_session "$DBG_REASON" "y"
 
 	# Tidy up before we switch_root (rootfs init-debug leaves these running during bootup)
 	killall telnetd
@@ -340,13 +327,11 @@ if [ "$DONE_SWITCH" = "no" ]; then
     echo "" > /proc/sys/kernel/hotplug
 
     if [ -f "/target/init-debug" ]; then
-	exec switch_root /target /init-debug &> /target/init-debug-stderrout
+        exec switch_root /target /init-debug &> /target/init-debug-stderrout
     else
-	# Prefer /sbin/preinit over /sbin/init
-	[ -x /target/sbin/preinit ] && INIT=/sbin/preinit || INIT=/sbin/init
-	if [ -x "/target$INIT" ]; then
-	    exec switch_root /target $INIT --log-level=debug --log-target=kmsg &> /target/init-stderrout
-	fi
+        # Prefer /sbin/preinit over /sbin/init
+        [ -x /target/sbin/preinit ] && INIT=/sbin/preinit || INIT=/sbin/init
+        exec switch_root /target $INIT --log-target=kmsg &> /target/init-stderrout
     fi
     run_debug_session "Failed to boot init in real rootfs"
 
